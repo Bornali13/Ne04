@@ -1,7 +1,8 @@
-promotionId,productid,promotionName,discount,startDate,endDate
+promotionId,productId,promotionName,discount,startDate,endDate
 PR001,P001,Spring Sale,10,10/1/2025,10/31/2025
 PR002,P002,Clearance,15,9/15/2025,10/20/2025
 PR003,P003,Safety Discount,5,10/1/2025,11/1/2025
 PR004,P004,Lab Gear Week,12,10/10/2025,10/20/2025
 PR005,P005,Accessory Promo,8,10/1/2025,10/25/2025
+
 
