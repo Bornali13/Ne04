@@ -1,4 +1,4 @@
-orderItemId,orderId,productId,quantity,price
+orderitemid,orderid,productid,quantity,price
 OI001,O001,P001,2,120
 OI002,O002,P002,1,85
 OI003,O003,P003,3,60
@@ -9,3 +9,4 @@ OI007,O007,P002,1,85
 OI008,O008,P003,1,20
 OI009,O009,P004,3,150
 OI010,O010,P005,1,20
+
