@@ -1,4 +1,4 @@
-shipmentId,orderid,shipDate,trackingNo
+shipmentId,orderId,shipDate,trackingNo
 S001,O001,2025-10-11,TRK10001
 S002,O002,2025-10-12,TRK10002
 S003,O003,2025-10-13,TRK10003
