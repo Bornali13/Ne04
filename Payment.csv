@@ -1,4 +1,4 @@
-﻿paymentid,orderid,total price,methodid
+﻿paymentId,orderId,totalprice,methodId
 PA001,O001,120,PM001
 PA002,O002,85,PM002
 PA003,O003,60,PM003
@@ -9,4 +9,5 @@ PA007,O007,85,PM001
 PA008,O008,20,PM002
 PA009,O009,150,PM003
 PA010,O010,20,PM001
+
 
