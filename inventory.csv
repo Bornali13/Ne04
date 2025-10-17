@@ -1,0 +1,4 @@
+inventoryId,productId,quantity,lastUpdated
+I001,P001,100,2025-10-01
+I002,P002,150,2025-10-05
+I003,P003,200,2025-10-10
