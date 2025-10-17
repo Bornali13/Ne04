@@ -1,6 +1,7 @@
-productId,productName,categoryId,price,stock
+productid,productName,categoryId,price,stock
 P001,Scrubs Set,C001,60,100
 P002,Chef Apron,C002,85,200
 P003,Safety Boots,C003,20,150
 P004,Apron,C004,50,100
 P005,Summer Hat,C005,20,150
+
