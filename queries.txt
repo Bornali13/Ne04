@@ -1,0 +1,31 @@
+// Q1: What has each customer spent and how many orders did they place?
+MATCH (c:Customer)-[:PLACES]->(o:Order)-[:HAS_ITEM]->(oi:OrderItem)
+WITH c, o, sum(oi.quantity * oi.price) AS orderTotal
+RETURN
+  c.userId AS customerId,
+  count(DISTINCT o) AS orders,
+  round(sum(orderTotal), 2) AS totalSpend
+ORDER BY totalSpend DESC;
+
+
+//Q2
+MATCH (o:Order)-[:HAS_PAYMENT]->(p:Payment)-[:USES_METHOD]->(m:Payment_Method)
+WHERE m.methodType = 'Credit Card' AND m.provider = 'Visa'
+  AND o.orderDate >= date('2025-10-01') AND o.orderDate < date('2025-11-01')
+RETURN o.orderId, o.orderDate, o.status, p.totalPrice, m.methodType, m.provider
+ORDER BY o.orderId;
+
+// Q3: Ops needs on-hand quantity per product
+MATCH (p:Product)<-[:CONTAINS_PRODUCT]-(i:Inventory)<-[:AFFECTS]-(ul:Update_Log)
+WITH p, sum(ul.changeQty) AS onHand
+RETURN p.productId, p.productName, onHand
+ORDER BY onHand DESC;
+
+// Q4: Units sold for products with active promos in Oct 2025
+MATCH (p:Product)-[:HAS_PROMOTION]->(pr:Promotion)
+WHERE date('2025-10-01') <= pr.endDate AND date('2025-10-31') >= pr.startDate
+MATCH (p)<-[:CONTAINS_PRODUCT]-(:OrderItem)<-[:HAS_ITEM]-(o:Order)
+WHERE o.orderDate >= date('2025-10-01') AND o.orderDate <= date('2025-10-31')
+WITH p, pr, count(*) AS units
+RETURN p.productId, p.productName, pr.promotionName, pr.discount, units
+ORDER BY units DESC;
