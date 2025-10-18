@@ -1,0 +1,292 @@
+///////Constraint
+CREATE CONSTRAINT user_id_unique IF NOT EXISTS FOR (u:User) REQUIRE u.userId IS UNIQUE;
+CREATE CONSTRAINT admin_id_unique IF NOT EXISTS FOR (a:Admin) REQUIRE a.userId IS UNIQUE;
+CREATE CONSTRAINT customer_id_unique IF NOT EXISTS FOR (c:Customer) REQUIRE c.userId IS UNIQUE;
+CREATE CONSTRAINT product_id_unique IF NOT EXISTS FOR (p:Product) REQUIRE p.productId IS UNIQUE;
+CREATE CONSTRAINT category_id_unique IF NOT EXISTS FOR (c:Category) REQUIRE c.categoryId IS UNIQUE;
+CREATE CONSTRAINT inventory_id_unique IF NOT EXISTS FOR (i:Inventory) REQUIRE i.inventoryId IS UNIQUE;
+CREATE CONSTRAINT order_id_unique IF NOT EXISTS FOR (o:Order) REQUIRE o.orderId IS UNIQUE;
+CREATE CONSTRAINT order_item_id_unique IF NOT EXISTS FOR (oi:OrderItem) REQUIRE oi.orderitemId IS UNIQUE;
+CREATE CONSTRAINT payment_id_unique IF NOT EXISTS FOR (p:Payment) REQUIRE p.paymentId IS UNIQUE;
+CREATE CONSTRAINT payment_method_id_unique IF NOT EXISTS FOR (pm:Payment_Method) REQUIRE pm.methodId IS UNIQUE;
+CREATE CONSTRAINT shipment_id_unique IF NOT EXISTS FOR (s:Shipment) REQUIRE s.shipmentId IS UNIQUE;
+CREATE CONSTRAINT promotion_id_unique IF NOT EXISTS FOR (pr:Promotion) REQUIRE pr.promotionId IS UNIQUE;
+CREATE CONSTRAINT update_log_id_unique IF NOT EXISTS FOR (ul:Update_Log) REQUIRE ul.updateId IS UNIQUE;
+
+///////----Relationship----//
+// USERS
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/users.csv' AS row
+MERGE (u:User {userId: row.userId})
+  ON CREATE SET
+    u.name    = row.name,
+    u.email   = row.email,
+    u.address = row.address;
+
+// ADMINS (role node linked from user)
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/admins.csv' AS row
+MATCH (u:User {userId: row.userId})
+MERGE (a:Admin {userId: row.userId})
+  ON CREATE SET a.adminRole = row.adminRole
+MERGE (u)-[:IS_ADMIN]->(a);
+
+// CUSTOMERS (role node linked from user)
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/customers.csv' AS row
+MATCH (u:User {userId: row.userId})
+MERGE (c:Customer {userId: row.userId})
+  ON CREATE SET c.loyaltyPoints = toInteger(row.loyaltyPoints)
+MERGE (u)-[:IS_CUSTOMER]->(c);
+
+// CATEGORIES
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/categories.csv' AS row
+MERGE (c:Category {categoryId: row.categoryId})
+  ON CREATE SET c.categoryName = row.categoryName;
+
+// PRODUCTS (and BELONGS_TO Category)
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/products.csv' AS row
+MERGE (p:Product {productId: row.productId})
+  ON CREATE SET p.productName = row.productName
+WITH row, p
+MATCH (c:Category {categoryId: row.categoryId})
+MERGE (p)-[:BELONGS_TO]->(c);
+
+// PROMOTIONS (and HAS_PROMOTION Product → Promotion)
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/promotions.csv' AS row
+MERGE (pr:Promotion {promotionId: row.promotionId})
+  ON CREATE SET
+    pr.promotionName = row.promotionName,
+    pr.discount      = toInteger(row.discount),
+    // dates in MM/DD/YYYY → convert to date type
+    pr.startDate     = date({year: toInteger(split(row.startDate,'/')[2]),
+                             month: toInteger(split(row.startDate,'/')[0]),
+                             day: toInteger(split(row.startDate,'/')[1])}),
+    pr.endDate       = date({year: toInteger(split(row.endDate,'/')[2]),
+                             month: toInteger(split(row.endDate,'/')[0]),
+                             day: toInteger(split(row.endDate,'/')[1])})
+WITH row, pr
+MATCH (p:Product {productId: row.productId})
+MERGE (p)-[:HAS_PROMOTION]->(pr);
+
+// INVENTORY
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/inventory.csv' AS row
+MERGE (i:Inventory {inventoryId: row.inventoryId})
+WITH row, i
+MATCH (p:Product {productId: row.productId})
+MERGE (i)-[:CONTAINS_PRODUCT]->(p);
+
+// UPDATE LOGS  (Admin → Update_Log → Inventory)
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/update_logs.csv' AS row
+MERGE (ul:Update_Log {updateId: row.updateId})
+  ON CREATE SET
+    ul.changeQty = toInteger(row.changeQty),
+    // updatedAt appears ISO-like; keep as datetime if ISO, else store raw string
+    ul.updatedAt = coalesce(datetime(row.updatedAt), datetime(replace(row.updatedAt,' ','T')))
+WITH row, ul
+MATCH (a:Admin {userId: row.userId})
+MERGE (a)-[:UPDATES]->(ul)
+WITH row, ul
+MATCH (i:Inventory {inventoryId: row.inventoryId})
+MERGE (ul)-[:AFFECTS]->(i);
+
+// === ORDERS ===
+LOAD CSV WITH HEADERS FROM
+'https://raw.githubusercontent.com/Bornali13/Ne04/main/orders.csv' AS row
+WITH row
+WHERE row.orderId IS NOT NULL AND row.orderId <> ''
+MERGE (o:Order {orderId: row.orderId})
+  ON CREATE SET
+    o.status = row.status,
+    o.orderDate = date({
+      year:  toInteger(split(row.orderDate, '/')[2]),
+      month: toInteger(split(row.orderDate, '/')[0]),
+      day:   toInteger(split(row.orderDate, '/')[1])
+    })
+WITH row, o
+MATCH (c:Customer {userId: row.userId})
+MERGE (c)-[:PLACES]->(o);
+
+// === ORDER ITEMS ===
+LOAD CSV WITH HEADERS FROM
+'https://raw.githubusercontent.com/Bornali13/Ne04/main/order_items.csv' AS row
+WITH row
+WHERE row.orderitemId IS NOT NULL AND row.orderitemId <> ''
+MERGE (oi:OrderItem {orderitemId: row.orderitemId})
+  ON CREATE SET
+    oi.quantity = toInteger(row.quantity),
+    oi.price    = toFloat(row.price)
+WITH row, oi
+MATCH (o:Order {orderId: row.orderId})
+MERGE (o)-[:HAS_ITEM]->(oi)
+WITH row, oi
+MATCH (p:Product {productId: row.productId})
+MERGE (oi)-[:CONTAINS_PRODUCT]->(p);
+
+// PAYMENT METHODS
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/Bornali13/Ne04/main/payment_methods.csv' AS row
+MERGE (pm:Payment_Method {methodId: row.methodId})
+  ON CREATE SET
+    pm.methodType = row.methodType,
+    pm.provider   = row.provider;
+
+// PAYMENTS  (Order → HAS_PAYMENT → Payment → USES_METHOD → Payment_Method)
+LOAD CSV WITH HEADERS FROM
+'https://raw.githubusercontent.com/Bornali13/Ne04/main/Payment.csv' AS row
+WITH row
+WHERE row.paymentId IS NOT NULL AND row.paymentId <> ''
+MERGE (pmt:Payment {paymentId: row.paymentId})
+  ON CREATE SET
+    pmt.totalPrice = toFloat(row.`totalprice`)
+WITH row, pmt
+MATCH (o:Order {orderId: row.orderId})
+MERGE (o)-[:HAS_PAYMENT]->(pmt)
+WITH row, pmt
+MATCH (pm:Payment_Method {methodId: row.methodId})
+MERGE (pmt)-[:USES_METHOD]->(pm);
+
+// SHIPMENTS  (Order → HAS_SHIPMENT → Shipment)
+LOAD CSV WITH HEADERS FROM
+'https://raw.githubusercontent.com/Bornali13/Ne04/main/shipments.csv' AS row
+WITH row
+WHERE row.shipmentId IS NOT NULL AND row.shipmentId <> ''
+MERGE (s:Shipment {shipmentId: row.shipmentId})
+  ON CREATE SET
+    s.shipDate   = date(row.shipDate),   // already YYYY-MM-DD
+    s.trackingNo = row.trackingNo
+WITH row, s
+MATCH (o:Order {orderId: row.orderId})
+MERGE (o)-[:HAS_SHIPMENT]->(s);
+
+////////---Sanity--Check---
+MATCH (u:User)
+WITH count(u) AS Users
+MATCH (a:Admin)
+WITH Users, count(a) AS Admins
+MATCH (c:Customer)
+WITH Users, Admins, count(c) AS Customers
+MATCH (cat:Category)
+WITH Users, Admins, Customers, count(cat) AS Categories
+MATCH (p:Product)
+WITH Users, Admins, Customers, Categories, count(p) AS Products
+MATCH (i:Inventory)
+WITH Users, Admins, Customers, Categories, Products, count(i) AS Inventories
+MATCH (ul:Update_Log)
+WITH Users, Admins, Customers, Categories, Products, Inventories, count(ul) AS UpdateLogs
+MATCH (o:Order)
+WITH Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs, count(o) AS Orders
+MATCH (oi:OrderItem)
+WITH Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs, Orders, count(oi) AS OrderItems
+MATCH (pay:Payment)
+WITH Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs, Orders, OrderItems, count(pay) AS Payments
+MATCH (pm:Payment_Method)
+WITH Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs, Orders, OrderItems, Payments, count(pm) AS PaymentMethods
+MATCH (s:Shipment)
+WITH Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs, Orders, OrderItems, Payments, PaymentMethods, count(s) AS Shipments
+MATCH (pr:Promotion)
+RETURN
+  Users, Admins, Customers, Categories, Products, Inventories, UpdateLogs,
+  Orders, OrderItems, Payments, PaymentMethods, Shipments, count(pr) AS Promotions;
+
+/////Check_relationship
+MATCH ()-[r]->() RETURN DISTINCT type(r) AS rel, count(*) AS cnt ORDER BY cnt DESC;
+
+/////Graph_View
+CALL db.schema.visualization();
+
+////Normalize_Date_before_queries
+// Normalize all Order.orderDate values to DATE
+MATCH (o:Order)
+WHERE o.orderDate IS NOT NULL
+WITH o, toString(o.orderDate) AS s
+WITH o,
+  CASE
+    WHEN s CONTAINS 'T' THEN date(datetime(s))        // e.g., 2025-09-30T14:00Z
+    WHEN s CONTAINS '-' THEN date(s)                  // e.g., 2025-10-01
+    ELSE date({                                       // e.g., 10/1/2025  (M/D/YYYY)
+      year:  toInteger(split(s,'/')[2]),
+      month: toInteger(split(s,'/')[0]),
+      day:   toInteger(split(s,'/')[1])
+    })
+  END AS d
+SET o.orderDate = d;
+
+// Normalize all Order.orderDate values to DATE
+MATCH (o:Order)
+WHERE o.orderDate IS NOT NULL
+WITH o, toString(o.orderDate) AS s
+WITH o,
+  CASE
+    WHEN s CONTAINS 'T' THEN date(datetime(s))        // e.g., 2025-09-30T14:00Z
+    WHEN s CONTAINS '-' THEN date(s)                  // e.g., 2025-10-01
+    ELSE date({                                       // e.g., 10/1/2025  (M/D/YYYY)
+      year:  toInteger(split(s,'/')[2]),
+      month: toInteger(split(s,'/')[0]),
+      day:   toInteger(split(s,'/')[1])
+    })
+  END AS d
+SET o.orderDate = d;
+
+//////Centrality_&-Similarity///////
+
+// create the storeGraph projection
+CALL gds.graph.drop('storeGraph', false);
+
+CALL gds.graph.project.cypher(
+  'storeGraph',
+  // Nodes
+  '
+  MATCH (n)
+  RETURN id(n) AS id, labels(n) AS labels
+  ',
+  // Relationships (all existing types, as stored)
+  '
+  MATCH (a)-[r]->(b)
+  RETURN id(a) AS source, id(b) AS target, type(r) AS type
+  '
+);
+
+// Degree Centrality
+CALL gds.degree.stream('storeGraph')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).name AS node, labels(gds.util.asNode(nodeId)) AS label, score
+ORDER BY score DESC
+LIMIT 10;
+// PageRank
+CALL gds.pageRank.stream('storeGraph')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).name AS node, labels(gds.util.asNode(nodeId)) AS label, round(score,4) AS pageRank
+ORDER BY pageRank DESC
+LIMIT 10;
+
+CALL gds.graph.list();
+
+// Customer ↔ Customer similarity (shared products)
+CALL gds.nodeSimilarity.stream(
+  'custProd',
+  { topK: 5, degreeCutoff: 1, similarityCutoff: 0.0 }
+)
+YIELD node1, node2, similarity
+WITH gds.util.asNode(node1) AS c1, gds.util.asNode(node2) AS c2, similarity
+WHERE "Customer" IN labels(c1) AND "Customer" IN labels(c2)
+RETURN c1.userId AS customer1, c2.userId AS customer2, round(similarity,3) AS sim
+ORDER BY sim DESC
+LIMIT 10;
+
+// Product–Product similarity (shared customers)
+CALL gds.nodeSimilarity.stream(
+  'custProd',
+  {topK: 5, degreeCutoff: 1, similarityCutoff: 0.0}
+)
+YIELD node1, node2, similarity
+WITH gds.util.asNode(node1) AS p1, gds.util.asNode(node2) AS p2, similarity
+WHERE "Product" IN labels(p1) AND "Product" IN labels(p2)
+RETURN p1.productId AS product1, p2.productId AS product2, round(similarity,3) AS similarity
+ORDER BY similarity DESC
+LIMIT 10;
+
+// Category-based product similarity
+MATCH (p1:Product)-[:BELONGS_TO]->(c:Category)<-[:BELONGS_TO]-(p2:Product)
+WHERE p1 <> p2
+RETURN DISTINCT p1.name AS Product1, p2.name AS Product2, c.categoryName AS SharedCategory
+ORDER BY SharedCategory;
+
+
+
